@@ -1,0 +1,143 @@
+---
+title: "bayesian_linear_regression for archdocs"
+output: html_document
+---
+
+``` {r setup}
+knitr::opts_knit$set(root.dir = '')
+setwd('')
+
+# library(rstanarm)
+library(brms)
+options(mc.cores = parallel::detectCores())
+source('prep.R')
+init()
+load.data()
+prep.data()
+library(rstanarm)
+options(mc.cores = parallel::detectCores())
+```
+
+## Causal model
+We first encode what we think could be happening in *causing* the usefulness score. There are a number of latent variables we might represent and also some explicit constructs we measure. Together those factors will cause the predicted score for the answer usefulness. 
+
+Some latent factors might include how tired the student is (maybe they did not feel like answering, and were not forced to), which might be of growing importance as the survey continues (i.e, for Q5 and Q6), how capable a student they are (e.g., their overall GPA), and other factors for which we have even less evidence, including gender and age. 
+
+We define some models that seem reasonable based on our causal graph. The goal is to find the model that best explains the data with the least predictors. Adding more predictors to model raises the risk we overfit (bias) to the data (i.e., degrees of freedom).
+
+``` {r models}
+# read file name as "model y for Qx"
+m1_2 = 'Q2 ~ Doctype + JetUML + UMLExp + English'
+m2_2 = 'Q2 ~ Doctype + JetUML + ProgExp + DesignCourse + ProgLang'
+m3_2 = 'Q2 ~ Doctype + ProgExp + DesignCourse + JetUML + ProgLang + GenExp + UMLExp + English'
+m1_3 = 'Q3 ~ Doctype + JetUML + UMLExp + English'
+m2_3 = 'Q3 ~ Doctype + JetUML + ProgExp + DesignCourse + ProgLang'
+m3_3 = 'Q3 ~ Doctype + ProgExp + DesignCourse + JetUML + ProgLang + GenExp + UMLExp + English'
+m1_4 = 'Q4 ~ Doctype + JetUML + UMLExp + English'
+m2_4 = 'Q4 ~ Doctype + JetUML + ProgExp + DesignCourse + ProgLang'
+m3_4 = 'Q4 ~ Doctype + ProgExp + DesignCourse + JetUML + ProgLang + GenExp + UMLExp + English'
+```
+
+## Standard linear regression (frequentist)
+Frequentist linear regression models use OLS (or in complex models, MLE) to fit the regression line. The metric R^2 represents the portion of explained variance from the best fit line.
+
+``` {r frequentist LR}
+m_none = lm(formula = Q3 ~ 1, data=survey) # no predictors, == mean
+m1_2.ffit = lm(formula = m1_2, data=survey)
+m2_2.ffit = lm(formula = m2_2, data=survey)
+m3_2.ffit = lm(formula = m3_2, data=survey)
+summary(m3_2.ffit)$r.squared
+# ... repeat for Q3/Q4
+```
+
+## Linear regression with a Bayesian flavour
+We can simulate the `lm` regression approach using a Bayesian approach (ie., an explicit prior and inference done using sampling). The problem with the approach here and the OLS approach previously is that it assumes a continuous response variable. In the grading, answer usefulness is not continuous but a discrete ordinal variable. Thus predicting a "2.6" doesn't make much sense. Keep in mind, however, that moving up one 'point' on the scale is equivalent to a 25% improvement in grade (e.g., moving from 1 - 2 is like going from a fail to a B+).
+
+```{r Bayes linear model with continuous response}
+# fit a simple linear model. This works but is not recommended with categorical outcomes.
+m1_2.bfit = stan_glm(m1_2, data = survey)
+plot(m1_2.bfit)
+pp_check(m1_2.bfit)
+library(shinystan)
+launch_shinystan(m1_2.bfit) # explore the data using Shinystan
+ci95 <- posterior_interval(m1_2.bfit, prob = 0.95)
+round(ci95, 2)
+``` 
+
+## Bayesian ordered categorical regression
+Ordered categorical regression explain the data responses (here, the usefulness or quality score $Q$) as being driven by an underlying latent variable $\tilde{Q}$ which is `cut' into the different categories with cutpoints. The cutpoints determine, given the inferred result of $\tilde{Q}$ for an individual response, which ordinal category to assign. See \cite{brkner}, which we follow in this analysis, for more details. 
+This properly treats the data as ordered adjacent categories (0,1,2,3; `acat' below) rather than a continuous response.
+This does come at the expense of interpretability: the data are now modeled as individual logits and we lose the easy---if misleading---interpretability of linear regression coefficients.
+
+We fit a few different models based on the different predictors. We go in detail through the process for the models for Q2, then follow the same process for Q3/Q4, without the detail. Our replication package contains all the code to reproduce those in detail.
+% We need at least as many possible outcomes (degrees of feedom) as the scores, i.e. 4. 
+
+We begin by fitting our models for the three postulated explanations:
+``` {r  brms logit}
+#from \cite{Brkner2019} doi:10.1177/2515245918823199
+
+
+factorize() # since it needs ordered factor data, not the continious versions assumed prev.
+m2_2.bfit <- brm(m2_2, data = survey, family = acat())
+m1_2.bfit <- brm(m1_2, data = survey, family = acat()) #= acat())
+m3_2.bfit <- brm(m3_2, data = survey, family = acat()) #= acat())
+
+m2_3.bfit <- brm(m2_3, data = survey, family = acat())
+m1_3.bfit <- brm(m1_3, data = survey, family = acat()) #= acat())
+m3_3.bfit <- brm(m3_3, data = survey, family = acat()) #= acat())
+
+m2_4.bfit <- brm(m2_4, data = survey, family = acat())
+m1_4.bfit <- brm(m1_4, data = survey, family = acat()) #= acat())
+m3_4.bfit <- brm(m3_4, data = survey, family = acat()) #= acat())
+
+#'Q2 ~ Doctype + JetUML + ProgExp + DesignCourse + ProgLang'
+```
+
+``` {r marginal effects}
+print(m1_2.bfit)
+print(m1_3.bfit)
+print(m1_4.bfit)
+conditional_effects(m1_2.bfit, "Doctype", categorical = TRUE)
+conditional_effects(m1_2.bfit, "JetUML", categorical = TRUE)
+```
+
+
+## Model comparison
+The Bayesian workflow of Gelman et al. focuses on model comparison as the evaluation process; we therefore need to examine which of the three models best explains the data. We do this with LOO. We compare different predictive models for each question and choose the one that is most informative using Leave One Out sampling (e.g., comparing the model trained on 64 datapoints against a held out single data point, 65 times). We do that for each of the four questions.
+
+``` {r loo_psis}
+l1_2 <- loo(m1_2.bfit)
+l2_2 <- loo(m2_2.bfit)
+l3_2 <- loo(m3_2.bfit)
+comp_2 <- loo_compare(l1_2,l2_2, l3_2)
+
+print(comp_2, simplify=FALSE)
+
+l1_3 <- loo(m1_3.bfit)
+l2_3 <- loo(m2_3.bfit)
+l3_3 <- loo(m3_3.bfit)
+comp_3 <- loo_compare(l1_3,l2_3, l3_3)
+
+print(comp_3, simplify=FALSE) #
+
+l1_4 <- loo(m1_4.bfit)
+l2_4 <- loo(m2_4.bfit)
+l3_4 <- loo(m3_4.bfit)
+comp_4 <- loo_compare(l1_4,l2_4, l3_4)
+
+print(comp_4, simplify=FALSE) #
+```
+
+## Appendix
+Ordinal Bayesian modeling is a well of rich analysis and modeling opportunities. Another approach is the more fine-grained examples from `rstanarm`. They approach the problem in the same way but the interpretability is less clear. In Bayesian modeling, it is important to explicitly model the prior beliefs we hold about the results. In this case, we do not have a strong belief about the results before looking at the data, and so we use a weakly informative prior that makes each outcome equally likely. Here the prior is on the proportion of variance explained, R^2, and we guess that approximately 30% of the variance is due to the predictors, a conservative estimate. 
+
+``` {r multinomial logit}
+# per p276 of Regression and Other Stories, Gelman
+ # <- stan_polr(m2_2, data = survey, prior = R2(0.2, "mean"))
+# factorize the responses
+factorize()
+m1_2.lfit <- stan_polr(m1_2, data = survey, prior = R2(0.3, "mean"))
+m2_2.lfit <- stan_polr(m2_2, data = survey, prior = R2(0.3, "mean"))
+print(m1_2.lfit)
+pp_check(m1_2.lfit)
+```

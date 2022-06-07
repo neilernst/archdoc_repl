@@ -1,0 +1,356 @@
+---
+title: "archdocs_eda.Rmd"
+author: "Neil Ernst"
+date: "1/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(descr)
+library(openxlsx)
+library(tidyverse)
+library(viridis)
+library(likert)
+library(dplyr)
+# install.packages('descr')
+
+```
+
+```{r data-ingest}
+institutions = openxlsx::read.xlsx("../data/master.xlsx", cols = c(1,11),sheet=1)
+names(institutions) = c("ID","Institution")
+
+df_tool = as_tibble(openxlsx::read.xlsx("../data/master.xlsx",cols=c(1,2,6,11),sheet=1))
+df_tool$Prev_tool = factor(df_tool$JetUML,
+                           levels=c("I have never heard of JetUML",
+                                    "I have used JetUML once or twice",
+                                    "I have looked at JetUML source code and/or documentation before this",
+                                    "I have used JetUML frequently",
+                                    "I have studied JetUML as part of a course."),
+                           labels=c("1","2","3","4","5"))
+
+# all NAs are responses that match 3
+df_tool$Prev_tool[is.na(df_tool$Prev_tool)] <- 3
+# except these rows:
+df_tool$Prev_tool[34] <- 2
+df_tool$Prev_tool[22] <- 2
+
+df_tool <- df_tool %>% mutate(Familiar = case_when(
+     Prev_tool == 1 | Prev_tool == 2 ~ FALSE,
+     Prev_tool == 3 ~ TRUE))
+# respect DBR and relabel variables
+school_names = list(
+  "McGill University" = "A",
+  "University of Victoria" = "B"
+)
+school_labeller = function(variable,value) {
+  return( school_names[value])
+}
+
+# A simplified version for paper
+df_tool_simple <- df_tool %>% mutate(prev_tool2 = case_when(
+     Prev_tool == 1 | Prev_tool == 2 ~ "Unfamiliar",
+     Prev_tool == 3 ~ "Familiar"))
+
+
+```
+
+``` {r load and filter data}
+source('prep.R')
+load.data()
+
+# this is based on the 3rd round of coding for answer score, 0, 1, 2, 3. No coding for Q1
+useful <- all.coded %>% 
+  select(-c(Q2Process, Q3Process, Q4Process,Q2Answer,Q3Answer,Q4Answer)) %>% 
+  left_join(df_tool_simple, by = "ID") %>% 
+  pivot_longer(cols = c(Q2Code,Q3Code,Q4Code), names_to = "Question", values_to = "Score")
+
+# rename to Q1 Q2 etc for join
+useful$Question <- str_replace(useful$Question, "Q([1-4])Code", "Q\\1")
+
+# round 1 coding on location where answer was found
+Q1 <- as_tibble(openxlsx::read.xlsx( paste0("../data/Q1-coded.xlsx"), cols = c(2,3,6,7,8,9),sheet=2))
+Q2 <- as_tibble(openxlsx::read.xlsx( paste0("../data/Q2-coded.xlsx"), cols = c(2,3,7,8,9),sheet=2))
+Q3 <- as_tibble(openxlsx::read.xlsx( paste0("../data/Q3-coded.xlsx"), cols = c(2,3,7,8,9),sheet=2))
+Q3$ext <- as.character(Q3$ext)
+Q4 <- as_tibble(openxlsx::read.xlsx( paste0("../data/Q4-coded.xlsx"), cols = c(2,3,7,8,9),sheet=2))
+
+all_qs_all_loc <- bind_rows("Q2" = Q2, "Q3" = Q3, "Q4" = Q4, .id = 'Question')
+# Q1 not included since it is unique in not being coded in round 3
+
+useful <- useful %>% 
+  full_join(all_qs_all_loc, by = c("ID","Question")) %>% 
+  filter(Score > 0 ) # 102 "Useful" answers
+```
+
+## System Familiarity
+``` {r plot-system}
+ggplot(data=df_tool_simple,aes(x=factor(prev_tool2),fill=University)) + 
+  geom_bar(position = "stack", colour="slategrey") +  
+  theme_bw() +
+  #facet_grid(.~df_tool$Institution, labeller=school_labeller) + # does a 2 facet barplot
+  labs(title="",x="Src Familiarity" ) +
+  theme(legend.position = "top", legend.text=element_text(size=14))+
+  # # scale_fill_manual(name="Institution",
+  #                   values=c("lightskyblue", "lightskyblue4"),
+  #                   breaks=c("McGill University","University of Victoria"),
+  #                   labels=c("McGill", "Victoria") ) +
+    scale_fill_viridis(begin=0.3,end=0.7,option="viridis",discrete = T) +
+
+  guides(fill=guide_legend(title=NULL)) + 
+   theme(axis.text.y=element_text(size=14)) +
+  geom_text(stat='count',aes(label=..count..),position = position_stack(vjust = .5)) +
+  coord_flip()
+ ggsave('school_tool_use.pdf', plot=last_plot())
+```
+
+# Find documents used for answers scoring > 0
+```{r echo=FALSE}
+
+# df = df %>% filter(is.na(docs) | docs != 'unusable') # should be 32 for Q3
+# useful %>% 
+#   filter(Question == "Q2") %>% 
+#   group_by(ext,src, docs) %>%
+#   # select(docs, ext, src) %>% 
+#   summarize(n())
+
+# is there a better loopier way? Almost certainly. 
+# Note here we use the Q1 table for the coding reasons mentioned above
+Q1_total <- as.numeric(Q1 %>% filter(useful) %>% summarize(n=n())  )
+Q1_ext <- as.numeric(Q1 %>% filter(useful & !is.na(ext) ) %>% summarize(n=n()))
+Q1_src <- as.numeric(Q1 %>% filter(useful & !is.na(src) ) %>% summarize(n=n()))
+Q1_docs <- as.numeric(Q1 %>% filter(useful & (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
+
+Q2_total <- as.numeric(useful %>% filter(Question == "Q2") %>% summarize(n=n()) )
+Q2_ext <- as.numeric(useful %>% filter(Question == "Q2" & !is.na(ext) ) %>% summarize(n=n()))
+Q2_src <- as.numeric(useful %>% filter(Question == "Q2" & !is.na(src) ) %>% summarize(n=n()))
+Q2_docs <- as.numeric(useful %>% filter(Question == "Q2" &  (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
+
+Q3_total <- as.numeric(useful %>% filter(Question == "Q3") %>% summarize(n=n()) )
+Q3_ext <- as.numeric(useful %>% filter(Question == "Q3" & !is.na(ext) ) %>% summarize(n=n()))
+Q3_src <- as.numeric(useful %>% filter(Question == "Q3" & !is.na(src) ) %>% summarize(n=n()))
+Q3_docs <- as.numeric(useful %>% filter(Question == "Q3" & (!is.na(docs) & docs != 'unusable') ) %>% summarize(n=n()))
+
+Q4_total <- as.numeric(useful %>% filter(Question == "Q4") %>% summarize(n=n()) )
+Q4_ext <- as.numeric(useful %>% filter(Question == "Q4" & !is.na(ext) ) %>% summarize(n=n()))
+Q4_src <- as.numeric(useful %>% filter(Question == "Q4" & !is.na(src) ) %>% summarize(n=n()))
+Q4_docs <- as.numeric(useful %>% filter(Question == "Q4" & (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
+
+ct =CrossTable(matrix(c(10,83,23,37),nrow=2,ncol=2,byrow=TRUE),fisher=TRUE) 
+
+# taken from totals below summing Q1+Q2 and Q3+Q4
+
+print(ct)
+
+# the summary data here becomes Table 11 on sources used
+
+```
+## Question Style vs Location 
+
+Q1 6 uses src, 45 use docs, 5 use external, 53 are useful + 3 unusable location
+Q2 4 uses src, 32 use docs, 1 use external, 37 are useful
+Q3 17 uses src, 22 use docs, 0 use external, 43 are useful + 2 unusable location
+Q4: 6 uses src, 13 use docs, 2 use external, 22 are useful
+A/B (1/2) are finding, C/D are designing , No Code is "Useful - Code"
+
+          Code   | No Code
+Finding    10    | 83
+Design     23    | 37
+
+# Use of Source Code to find the answer (Table 12)
+``` {r source use}
+# answers that were useful and used the source code
+Q1.src <- Q1 %>% filter(useful & !is.na(src) ) %>% left_join (df_tool_simple, by="ID")
+Q2.src <- useful %>% filter(Question == "Q2" & !is.na(src))
+Q3.src <- useful %>% filter(Question == "Q3" & !is.na(src))
+Q4.src <- useful %>% filter(Question == "Q4" & !is.na(src))
+
+
+all_qs_src_sum  <- bind_rows("Q1" = Q1.src , "Q2" = Q2.src , "Q3" = Q3.src , "Q4" = Q4.src, .id = "Question") %>% 
+  group_by(Doctype, Question) %>% 
+  summarize(n=n())
+
+# look at the others
+# 22 useful answers did not give a location, ignore those
+# also assume that using BOTH docs and src is counted in both columns (i.e. not XOR)
+useful %>% filter(is.na(src) & is.na(ext) & is.na(docs))
+
+Q1.nosrc <- Q1 %>% filter(useful & docs != 'unusable' & is.na(src)) %>% left_join (df_tool_simple, by="ID")
+Q2.nosrc <- useful %>% 
+  filter(Question == "Q2" & ((!is.na(docs) & docs != 'unusable') | !is.na(ext))) 
+         
+Q3.nosrc <- useful %>% 
+  filter(Question == "Q3" & ((!is.na(docs) & docs != 'unusable') | !is.na(ext))) 
+
+Q4.nosrc <- useful %>%
+  filter(Question == "Q4" & ((!is.na(docs) & docs != 'unusable') | !is.na(ext))) 
+
+
+all_qs_nosrc_sum  <- bind_rows("Q1" = Q1.nosrc , "Q2" = Q2.nosrc , "Q3" = Q3.nosrc , "Q4" = Q4.nosrc, .id = "Question") %>% 
+  group_by(Doctype, Question) %>% 
+  summarize(n=n())
+
+# to create table 12 - just the non-src useful qs in all_qs_all_loc_sum and the src only useful questions.
+```
+
+## Familiarity with code vs Question Number for Useful Answers (table 13)
+
+``` {r familiar overall}
+# sum the useful answers, doctype and familiarity for all questions (table 13)
+
+# join with the doc type and code familiar
+useful_sum <- useful %>% 
+  group_by(prev_tool2,Doctype) %>% 
+  summarize(n=n())
+
+useful_m <- matrix(c(useful_sum$n),nrow=2, byrow=TRUE,dimnames = list(rows = c("Familiar","Unfamiliar"),
+                                                columns = c("ESD","V&B")))
+fisher.test(useful_m) # p 0.074
+xtable(useful_m)
+```
+
+## Subject opinion
+```{r subjective}
+
+#names(df_tool) = c("ID","Type", "Familiar", "Institution")
+#df_tool$Familiar = recode_factor(df_tool$Familiar, `1`=FALSE,`2`=FALSE,`3`=TRUE,`4`=TRUE,`5`=TRUE) # TRUE = familiar
+
+# subjective opinion on doc
+impression_df = openxlsx::read.xlsx("../data/master.xlsx", cols = c(1,32),sheet=1)
+i_df = separate_rows(impression_df, Code_impression, sep = ",")
+i_df = i_df %>% filter(Code_impression != "unusable_comment", Code_impression!="unclear_comment")
+# cool tidyverse package to lump small counts together
+i_df = i_df %>% mutate(Code_impression=fct_lump(Code_impression,n=4))
+impression_labs = rev(c("Generally Happy","Doc Was Incomplete","Doc Hard to Navigate","Doc Too Abstract","Other"))
+# plot these subjective counts + block on familiarity
+i_df = left_join(i_df,df_tool,by="ID")
+```
+
+```{r display_subj}
+i_df$Code_impression = factor(i_df$Code_impression, 
+                              levels = rev(c("generally_happy" , "incomplete_doc"  , "low_navigability" ,"too_abstract"   ,  "Other")),
+                              ordered=TRUE)
+ggplot(data=i_df,aes(fill=Familiar, 
+                     x = Code_impression)) + #eorder(i_df$Code_impression, i_df$Code_impression,  ))) + 
+                     #x=i_df$Code_impression))+
+  geom_bar(position = "dodge",colour="slategrey") +  
+  theme_bw() +
+  #facet_grid(.~i_df$Familiar) +
+  # theme(strip.background = element_blank(), strip.text.x = element_blank()) +
+  labs(title="", y="",x="") +
+  guides(fill=guide_legend(title="") )+ #Familiarity with DesktopTool")) +
+  scale_x_discrete(labels= impression_labs) + 
+  theme(legend.position = "top", legend.text=element_text(size=14))+
+  theme(axis.text.x=element_blank())  +
+  theme(axis.text.y=element_text(size=14)) +
+  scale_fill_viridis(
+    breaks=c("TRUE","FALSE"),
+    labels=c("Familiar", "Unfamiliar"),
+    begin=0.3,end=0.7,
+    option="viridis",discrete = T) +
+  # scale_fill_manual(name="Familiarity",
+  #                    # values=c("lightskyblue", "lightskyblue4"),
+  #                          +
+  geom_text(stat='count', aes(label=..count..), hjust=-.25, position=position_dodge2(width=1))+
+  coord_flip()
+# ggsave('images/impression_fam.pdf', plot=last_plot())
+
+```
+
+## Likert 
+``` {r likert}
+# likert analysis
+likert_df = openxlsx::read.xlsx("../data/master.xlsx", cols = c(2,24:30),sheet=1)
+# drop 'vision' column
+likert_df = select (likert_df,-c(LVision))
+
+likert_names =            c("navigable","help_needed","inconsistent","background_knowledge","easy_to_use","help_coding")
+#names(likert_df) = c("type","navigable","help_needed","inconsistent","background_knowledge","vision","easy_to_use","help_coding")
+
+names(likert_df) = c("type", likert_names )
+likert_order = c("Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree")
+likert_order_rev = c("Strongly Agree", "Agree", "Neutral", "Disagree", "Strongly Disagree")
+
+likert_df$navigable = factor(likert_df$navigable,levels=likert_order,ordered = TRUE)
+likert_df$help_needed = factor(likert_df$help_needed,levels=likert_order_rev,ordered = TRUE)
+likert_df$inconsistent = factor(likert_df$inconsistent,levels=likert_order_rev,ordered = TRUE)
+likert_df$background_knowledge = factor(likert_df$background_knowledge,levels=likert_order_rev,ordered = TRUE)
+#likert_df$vision = factor(likert_df$vision,levels=likert_order,ordered = TRUE)
+likert_df$easy_to_use = factor(likert_df$easy_to_use,levels=likert_order,ordered = TRUE)
+likert_df$help_coding = factor(likert_df$help_coding,levels=likert_order,ordered = TRUE)
+
+names(likert_df) = c("type","I thought the document was easy to navigate.","I think that I would need assistance to be able to use this document.","I thought there was too much inconsistency in the architecture document.","I needed to learn a lot of things before I could get going with this document.","I would imagine that most readers would learn to use this document very quickly.","I could see using this document while writing JetUML source code.") # dropped: "This document gave me a good sense for DeskTopTool's vision."
+likert_df = likert_df %>% mutate(type = replace(type, type == "Type E", "ESD"))
+likert_df = likert_df %>% mutate(type = replace(type, type == "Type V", "V&B"))
+plot (likert(likert_df[,2:7],grouping = likert_df$type), ordered=TRUE)
+# ggsave('images/both_likert.pdf', plot=last_plot())
+
+# plot per type
+#likert_df.E = likert_df[(likert_df$type == 'Type E'),]
+#likert_df.V = likert_df[(likert_df$type == 'Type V'),]
+#plot (likert(likert_df.E[,2:8],), ordered=FALSE, group.order=likert_names)+ ggtitle("ESD Style")
+#plot (likert(likert_df.V[,2:8]), ordered=FALSE, group.order=likert_names) + ggtitle("VB Style")
+```
+## Likert - Bayesian
+```{r brms likert}
+# brms approach
+knitr::opts_chunk$set(cache = TRUE, fig.width = 10)
+library(tidyverse)
+library(brms)
+library(plyr)
+theme_set(theme_default())
+
+# set rstan options
+rstan::rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# convert to numeric
+df2 = likert_df
+n <- c("Strongly Disagree" = 1, "Disagree" = 2, "Neutral" =3 , "Agree" =4, "Strongly Agree"=5)
+df2$navigable = mapvalues(df2$navigable, from = c("Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), 
+          to = c(1,2,3,4,5))
+likert_names =            c("navigable","help_needed","inconsistent","background_knowledge","easy_to_use","help_coding")
+#names(likert_df) = c("type","navigable","help_needed","inconsistent","background_knowledge","vision","easy_to_use","help_coding")
+
+names(df2) = c("type", likert_names )
+# model as cumulative probit from Ordinal Regression Models in Psychology: A Tutorial by Paul-Christian Bürkner1 & Matti Vuorre2
+fit_sc1 <- brm(
+  formula = help_coding ~ 1 + type, 
+  data = df2, 
+  family = cumulative("probit")
+)
+
+summary(fit_sc1)
+marginal_effects(fit_sc1, "type", categorical = TRUE)
+
+# bayesian linear model of usefulness ~ institution,familiarity
+
+# generate counts for table on where answers found
+# df %>% filter(useful==TRUE, docs!='',docs!='unusable')
+```
+
+## Bayesian linear regression modeling
+ *** See the updated LR approach in bayes_lr.Rmd ***
+
+
+``` {r calc table of response score}
+m <- matrix(nrow = 3, byrow = TRUE, data = c("Q2", 28, 19, 15, 3 , "Q3", 22, 27, 11, 5 , "Q4", 43, 11, 9,  2 ))
+colnames(m) <- c("Question","Poor","Fair","Good","Excellent")
+m <- as_tibble(m)
+m$Poor <- as.numeric(m$Poor)
+m$Good <- as.numeric(m$Good)
+m$Fair <- as.numeric(m$Fair)
+m$Excellent <- as.numeric(m$Excellent)
+m2 <- m %>% pivot_longer(!Question,names_to = "Scale",values_to = "Count")
+m2$Scale <- factor(m2$Scale, levels=c("Poor","Fair","Good","Excellent"), ordered=TRUE)
+plot <- ggplot(data=m2, aes(x=Question, y=Count, fill=Scale)) +
+  geom_bar(position="dodge", stat="identity") +
+    scale_fill_viridis(begin=0.2,end=0.8,option="viridis",discrete = T) +
+  geom_text(aes(label = Count),position = position_dodge2(width = .9),vjust=-.5,size=5) +
+   theme_bw(base_size = 20)
+  # theme(axis.text=element_text(size=14)) 
+ 
+ggsave(filename = 'q_score_count.pdf',plot=plot,device="pdf", width=14)
+
+```
