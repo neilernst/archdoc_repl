@@ -7,9 +7,8 @@ Please cite the paper as:
 
 ```
 @article{ernst_archdocs,
-author = {Neil Ernst and Martin Robillard
-title = {Does the Format of Software Architecture Documentation
-Matter for Project Onboarding?},
+author = {Neil Ernst and Martin Robillard},
+title = {Does the Format of Software Architecture Documentation Matter for Project Onboarding?},
 year = 2022
 }
 ```
