@@ -1,12 +1,16 @@
 # README
 
-Replication package for the paper {TITLE}, looking at architecture documentation style and developer knowledge.
+Replication package for the paper **Does the Format of Software Architecture Documentation
+Matter for Project Onboarding?**, looking at architecture documentation style and developer knowledge.
 
 Please cite the paper as:
 
 ```
 @article{ernst_archdocs,
-author = {Neil Ernst and Martin Robillard}}
+author = {Neil Ernst and Martin Robillard},
+title = {Does the Format of Software Architecture Documentation Matter for Project Onboarding?},
+year = 2022
+}
 ```
 
 ## Materials
