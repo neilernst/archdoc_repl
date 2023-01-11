@@ -22,6 +22,9 @@ institutions = openxlsx::read.xlsx("../data/master.xlsx", cols = c(1,11),sheet=1
 names(institutions) = c("ID","Institution")
 
 df_tool = as_tibble(openxlsx::read.xlsx("../data/master.xlsx",cols=c(1,2,6,11),sheet=1))
+#note that for prev tool, there are no entries for 4 and 5 (1  2  3  4  5 #
+#                                                           37  8 20  0  0 ) 
+#since those categories were subsumed in 3, looked at src code
 df_tool$Prev_tool = factor(df_tool$JetUML,
                            levels=c("I have never heard of JetUML",
                                     "I have used JetUML once or twice",
@@ -82,6 +85,17 @@ all_qs_all_loc <- bind_rows("Q2" = Q2, "Q3" = Q3, "Q4" = Q4, .id = 'Question')
 useful <- useful %>% 
   full_join(all_qs_all_loc, by = c("ID","Question")) %>% 
   filter(Score > 0 ) # 102 "Useful" answers
+```
+
+## Experience in industry
+``` {r ind-experience}
+df_gen <- as_tibble(openxlsx::read.xlsx("../data/master.xlsx",cols=c(1,2,8),sheet=1))
+new <- df_gen %>%  mutate(col1 = str_replace_all(
+  GenExp, 
+  pattern = 'I worked, or I am working, as a software developer, outside of co-op or internships', 
+  replacement = 'non-intern dev'))
+summary(as.factor(unlist(strsplit(toString(new$col1), ","))))
+# co-op 38, professional 17+1, none 53. only none 19, only co-op (??) 7, only pro 5, courses + coop 21, all = 10, co+op + pro = 3, courses + pro = 3. Coop = 7 + 21 + 10. Pro = 5 + 10 + 3, courses = 10 + 21 + 3 + 19. 
 ```
 
 ## System Familiarity
