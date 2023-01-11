@@ -9,6 +9,6 @@ authors:
   orcid: "https://orcid.org/0000-0002-0248-1384"
 title: "Replication Package for 'Does the Format of Software Architecture Documentation Matter for Project Onboarding?'"
 version: 1.0.0
-doi: 
+doi: 10.5281/zenodo.7527502
 date-released: 2023-01-11
 url: "https://github.com/neilernst/archdoc_repl"
