@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Ernst"
+  given-names: "Neil"
+  orcid: "https://orcid.org/0000-0001-5992-2366"
+- family-names: "Robillard"
+  given-names: "Martin"
+  orcid: "https://orcid.org/0000-0002-0248-1384"
+title: "Replication Package for 'Does the Format of Software Architecture Documentation Matter for Project Onboarding?'"
+version: 1.0.0
+doi: 10.5281/zenodo.7527502
+date-released: 2023-01-11
+url: "https://github.com/neilernst/archdoc_repl"

@@ -1,17 +1,9 @@
-# README
+[![DOI](https://zenodo.org/badge/498915162.svg)](https://zenodo.org/badge/latestdoi/498915162)
 
 Replication package for the paper **Does the Format of Software Architecture Documentation
 Matter for Project Onboarding?**, looking at architecture documentation style and developer knowledge.
 
-Please cite the paper as:
-
-```
-@article{ernst_archdocs,
-author = {Neil Ernst and Martin Robillard},
-title = {Does the Format of Software Architecture Documentation Matter for Project Onboarding?},
-year = 2022
-}
-```
+See CITATION.cff for citation info. 
 
 ## Materials
 
