@@ -85,6 +85,9 @@ all_qs_all_loc <- bind_rows("Q2" = Q2, "Q3" = Q3, "Q4" = Q4, .id = 'Question')
 useful <- useful %>% 
   full_join(all_qs_all_loc, by = c("ID","Question")) %>% 
   filter(Score > 0 ) # 102 "Useful" answers
+# sensitivity analysis for R1: does score greater than 1 matter? 
+useful_2 <- useful %>% filter(Score > 1)
+
 ```
 
 ## Experience in industry
@@ -130,12 +133,13 @@ ggplot(data=df_tool_simple,aes(x=factor(prev_tool2),fill=University)) +
 #   summarize(n())
 
 # is there a better loopier way? Almost certainly. 
-# Note here we use the Q1 table for the coding reasons mentioned above
+# Note here we use the Q1 table for the coding reasons mentioned above (round 1 coding)
 Q1_total <- as.numeric(Q1 %>% filter(useful) %>% summarize(n=n())  )
 Q1_ext <- as.numeric(Q1 %>% filter(useful & !is.na(ext) ) %>% summarize(n=n()))
 Q1_src <- as.numeric(Q1 %>% filter(useful & !is.na(src) ) %>% summarize(n=n()))
 Q1_docs <- as.numeric(Q1 %>% filter(useful & (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
 
+# now use the R3 coding
 Q2_total <- as.numeric(useful %>% filter(Question == "Q2") %>% summarize(n=n()) )
 Q2_ext <- as.numeric(useful %>% filter(Question == "Q2" & !is.na(ext) ) %>% summarize(n=n()))
 Q2_src <- as.numeric(useful %>% filter(Question == "Q2" & !is.na(src) ) %>% summarize(n=n()))
@@ -151,7 +155,7 @@ Q4_ext <- as.numeric(useful %>% filter(Question == "Q4" & !is.na(ext) ) %>% summ
 Q4_src <- as.numeric(useful %>% filter(Question == "Q4" & !is.na(src) ) %>% summarize(n=n()))
 Q4_docs <- as.numeric(useful %>% filter(Question == "Q4" & (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
 
-ct =CrossTable(matrix(c(10,83,23,37),nrow=2,ncol=2,byrow=TRUE),fisher=TRUE) 
+ct =CrossTable(matrix(c(4,33,23,37),nrow=2,ncol=2,byrow=TRUE),fisher=TRUE) 
 
 # taken from totals below summing Q1+Q2 and Q3+Q4
 
@@ -162,14 +166,16 @@ print(ct)
 ```
 ## Question Style vs Location 
 
-Q1 6 uses src, 45 use docs, 5 use external, 53 are useful + 3 unusable location
+Ignore Q1 Q1 6 uses src, 45 use docs, 5 use external, 53 are useful + 3 unusable location
+
+
 Q2 4 uses src, 32 use docs, 1 use external, 37 are useful
 Q3 17 uses src, 22 use docs, 0 use external, 43 are useful + 2 unusable location
 Q4: 6 uses src, 13 use docs, 2 use external, 22 are useful
 A/B (1/2) are finding, C/D are designing , No Code is "Useful - Code"
 
           Code   | No Code
-Finding    10    | 83
+Finding    4    | 33
 Design     23    | 37
 
 # Use of Source Code to find the answer (Table 12)
@@ -180,8 +186,8 @@ Q2.src <- useful %>% filter(Question == "Q2" & !is.na(src))
 Q3.src <- useful %>% filter(Question == "Q3" & !is.na(src))
 Q4.src <- useful %>% filter(Question == "Q4" & !is.na(src))
 
-
-all_qs_src_sum  <- bind_rows("Q1" = Q1.src , "Q2" = Q2.src , "Q3" = Q3.src , "Q4" = Q4.src, .id = "Question") %>% 
+# we dropped analysis of Q1 since it was not predictably answered
+all_qs_src_sum  <- bind_rows( "Q2" = Q2.src , "Q3" = Q3.src , "Q4" = Q4.src, .id = "Question") %>% #"Q1" = Q1.src ,
   group_by(Doctype, Question) %>% 
   summarize(n=n())
 
@@ -190,7 +196,7 @@ all_qs_src_sum  <- bind_rows("Q1" = Q1.src , "Q2" = Q2.src , "Q3" = Q3.src , "Q4
 # also assume that using BOTH docs and src is counted in both columns (i.e. not XOR)
 useful %>% filter(is.na(src) & is.na(ext) & is.na(docs))
 
-Q1.nosrc <- Q1 %>% filter(useful & docs != 'unusable' & is.na(src)) %>% left_join (df_tool_simple, by="ID")
+# Q1.nosrc <- Q1 %>% filter(useful & docs != 'unusable' & is.na(src)) %>% left_join (df_tool_simple, by="ID")
 Q2.nosrc <- useful %>% 
   filter(Question == "Q2" & ((!is.na(docs) & docs != 'unusable') | !is.na(ext))) 
          
@@ -201,7 +207,7 @@ Q4.nosrc <- useful %>%
   filter(Question == "Q4" & ((!is.na(docs) & docs != 'unusable') | !is.na(ext))) 
 
 
-all_qs_nosrc_sum  <- bind_rows("Q1" = Q1.nosrc , "Q2" = Q2.nosrc , "Q3" = Q3.nosrc , "Q4" = Q4.nosrc, .id = "Question") %>% 
+all_qs_nosrc_sum  <- bind_rows("Q2" = Q2.nosrc , "Q3" = Q3.nosrc , "Q4" = Q4.nosrc, .id = "Question") %>% #"Q1" = Q1.nosrc 
   group_by(Doctype, Question) %>% 
   summarize(n=n())
 
@@ -224,6 +230,41 @@ fisher.test(useful_m) # p 0.074
 xtable(useful_m)
 ```
 
+``` {r sensitivity}
+# consider if question score > 1 is still significant
+# now use the R3 coding
+Q2_total_2 <- as.numeric(useful_2 %>% filter(Question == "Q2") %>% summarize(n=n()) )
+Q2_ext_2 <- as.numeric(useful_2 %>% filter(Question == "Q2" & !is.na(ext) ) %>% summarize(n=n()))
+Q2_src_2 <- as.numeric(useful_2 %>% filter(Question == "Q2" & !is.na(src) ) %>% summarize(n=n()))
+Q2_docs_2 <- as.numeric(useful_2 %>% filter(Question == "Q2" &  (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
+
+Q3_total_2 <- as.numeric(useful_2 %>% filter(Question == "Q3") %>% summarize(n=n()) )
+Q3_ext_2 <- as.numeric(useful_2 %>% filter(Question == "Q3" & !is.na(ext) ) %>% summarize(n=n()))
+Q3_src_2 <- as.numeric(useful_2 %>% filter(Question == "Q3" & !is.na(src) ) %>% summarize(n=n()))
+Q3_docs_2 <- as.numeric(useful_2 %>% filter(Question == "Q3" & (!is.na(docs) & docs != 'unusable') ) %>% summarize(n=n()))
+
+Q4_total_2 <- as.numeric(useful_2 %>% filter(Question == "Q4") %>% summarize(n=n()) )
+Q4_ext_2 <- as.numeric(useful_2 %>% filter(Question == "Q4" & !is.na(ext) ) %>% summarize(n=n()))
+Q4_src_2 <- as.numeric(useful_2 %>% filter(Question == "Q4" & !is.na(src) ) %>% summarize(n=n()))
+Q4_docs_2 <- as.numeric(useful_2 %>% filter(Question == "Q4" & (!is.na(docs) & docs != 'unusable')) %>% summarize(n=n()))
+
+
+ct =CrossTable(matrix(c(2,16,16,16),nrow=2,ncol=2,byrow=TRUE),fisher=TRUE) 
+
+# taken from totals below summing Q1+Q2 and Q3+Q4
+
+print(ct)
+
+```
+For sensitivity with score > 1:
+Q2 2 uses src, 16 use docs, 0 use external, 18 are useful (score 2 or 3)
+Q3 11 uses src, 9 use docs, 0 use external, 16 are useful 
+Q4: 5 uses src, 6 use docs, 1 use external, 11 are useful
+A/B (1/2) are finding, C/D are designing , No Code is "Useful - Code"
+
+          Code   | No Code
+Finding    2    | 16
+Design     16    |  16
 ## Subject opinion
 ```{r subjective}
 

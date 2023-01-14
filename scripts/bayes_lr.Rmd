@@ -5,7 +5,7 @@ output: html_document
 
 ``` {r setup}
 knitr::opts_knit$set(root.dir = '')
-setwd('')
+# setwd('')
 
 # library(rstanarm)
 library(brms)
